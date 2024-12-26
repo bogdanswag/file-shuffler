@@ -4,6 +4,7 @@ import time
 import math
 import logging
 import os
+import charset_normalizer
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -20,6 +21,12 @@ def process_chunk(chunk):
     logging.info(f"Чанк из {len(chunk)} строк обработан.")
     return shuffled_chunk
 
+def detect_encoding(filepath):
+    with open(filepath, 'rb') as f:
+        rawdata = f.read()
+        result = charset_normalizer.detect(rawdata)
+        return result['encoding']
+
 def shuffle_large_file(filepath, output_filepath, num_threads=None):
     start_time = time.time()
 
@@ -28,7 +35,10 @@ def shuffle_large_file(filepath, output_filepath, num_threads=None):
 
     logging.info(f"Используется потоков: {num_threads}")
 
-    with open(filepath, 'r') as f:
+    input_encoding = detect_encoding(filepath)
+    logging.info(f"Входной файл определен в кодировке: {input_encoding}")
+
+    with open(filepath, 'r', encoding=input_encoding) as f:
         total_lines = sum(1 for _ in f)
 
     logging.info(f"Всего строк в файле: {total_lines}")
@@ -37,7 +47,7 @@ def shuffle_large_file(filepath, output_filepath, num_threads=None):
 
     logging.info(f"Размер части: {chunk_size} строк")
 
-    with open(filepath, 'r') as f:
+    with open(filepath, 'r', encoding=input_encoding) as f:
         chunks = []
         chunk = []
         lines_read = 0
@@ -53,13 +63,13 @@ def shuffle_large_file(filepath, output_filepath, num_threads=None):
             logging.info(f"Последний чанк из {len(chunk)} строк добавлен. Всего строк обработано: {lines_read}.\n")
 
     logging.info(f"Файл разделен на {len(chunks)} частей.")
-    
+
     clear_console()
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
         results = executor.map(process_chunk, chunks)
 
-    with open(output_filepath, 'w') as outfile:
+    with open(output_filepath, 'w', encoding=input_encoding) as outfile:
         for idx, chunk_result in enumerate(results, start=1):
             outfile.writelines(chunk_result)
             logging.info(f"Чанк {idx}/{len(chunks)} записан в выходной файл.")
